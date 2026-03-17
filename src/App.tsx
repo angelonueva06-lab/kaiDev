@@ -1610,7 +1610,7 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
   );
 };
 
-const Login = ({ onBack }: { onBack: () => void }) => {
+const Login = ({ onBack, onLoginSuccess }: { onBack: () => void; onLoginSuccess: () => void }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -1618,6 +1618,10 @@ const Login = ({ onBack }: { onBack: () => void }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (email === 'kaiDev' && password === '@Nueva123') {
+      onLoginSuccess();
+      return;
+    }
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
@@ -1649,13 +1653,13 @@ const Login = ({ onBack }: { onBack: () => void }) => {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">Email Address</label>
+            <label className="block text-sm font-medium text-zinc-400 mb-2">Username</label>
             <input 
-              type="email" 
+              type="text" 
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full px-6 py-4 glass bg-white/5 rounded-2xl focus:outline-none focus:border-primary transition-colors text-white"
-              placeholder="admin@kaidev.com"
+              placeholder="Enter Username"
               required
             />
           </div>
@@ -1838,9 +1842,10 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [isCustomAdmin, setIsCustomAdmin] = useState(false);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
 
-  const isAdmin = user?.email === 'angelonueva06@gmail.com';
+  const isAdmin = user?.email === 'angelonueva06@gmail.com' || isCustomAdmin;
 
   useEffect(() => {
     document.body.className = isDark ? 'dark' : '';
@@ -1858,9 +1863,9 @@ export default function App() {
   if (isLoading) return <LoadingScreen onComplete={() => setIsLoading(false)} />;
   if (!settings) return null;
 
-  if (isAdmin && showLogin) return <AdminDashboard user={user as any} onLogout={() => auth.signOut()} />;
+  if (isAdmin && showLogin) return <AdminDashboard user={(user as any) || { email: 'kaiDev' }} onLogout={() => { auth.signOut(); setIsCustomAdmin(false); setShowLogin(false); }} />;
 
-  if (showLogin) return <Login onBack={() => setShowLogin(false)} />;
+  if (showLogin) return <Login onBack={() => setShowLogin(false)} onLoginSuccess={() => { setIsCustomAdmin(true); setShowLogin(true); }} />;
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme: () => setIsDark(!isDark) }}>
