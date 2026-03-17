@@ -1,0 +1,116 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application, typically an admin.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "description": "The role of the user, e.g., 'admin'."
+        }
+      },
+      "required": ["role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A portfolio project.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "image_url": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["title", "category", "description"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A service offered by the portfolio owner.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["name", "description"]
+    },
+    "Certificate": {
+      "title": "Certificate",
+      "description": "A certificate earned by the portfolio owner.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "image_url": { "type": "string" }
+      },
+      "required": ["title", "image_url"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An inquiry message from a visitor.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "service": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "processing", "declined", "done"] },
+        "contract_url": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["name", "email", "service", "message", "status"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A chat message in the live chat.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "sender": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "timestamp" }
+      },
+      "required": ["sessionId", "sender", "text", "createdAt"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "A global setting for the portfolio.",
+      "type": "object",
+      "properties": {
+        "value": { "type": "string" }
+      },
+      "required": ["value"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles and roles."
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Portfolio projects."
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/Service" },
+      "description": "Offered services."
+    },
+    "/certificates/{certificateId}": {
+      "schema": { "$ref": "#/entities/Certificate" },
+      "description": "Certificates."
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Inquiry messages."
+    },
+    "/chat_messages/{chatMessageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Live chat messages."
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/Setting" },
+      "description": "Global settings."
+    }
+  }
+}
