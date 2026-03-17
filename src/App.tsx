@@ -48,19 +48,8 @@ interface Settings {
 // --- Contexts ---
 const ThemeContext = createContext<{ isDark: boolean; toggleTheme: () => void }>({ isDark: true, toggleTheme: () => {} });
 
-import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  serverTimestamp, 
-  setDoc 
-} from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { db, storage, auth, signInWithGoogle } from './firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useFirebase } from './FirebaseProvider';
+import { useSupabase } from './SupabaseProvider';
+import { supabase } from './lib/supabase';
 
 // --- Components ---
 
@@ -140,7 +129,7 @@ const LoadingScreen = ({ onComplete }: { onComplete: () => void }) => {
 
 const Navbar = ({ onAdminClick }: { onAdminClick: () => void }) => {
   const { isDark, toggleTheme } = useContext(ThemeContext);
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -152,8 +141,7 @@ const Navbar = ({ onAdminClick }: { onAdminClick: () => void }) => {
 
   const handleLogout = async () => {
     try {
-      const { logout } = await import('./firebase');
-      await logout();
+      await supabase.auth.signOut();
     } catch (err) {
       console.error(err);
     }
@@ -337,7 +325,7 @@ const Hero = ({ settings, onHireClick }: { settings: Settings; onHireClick: () =
 };
 
 const Projects = () => {
-  const { projects, services } = useFirebase();
+  const { projects, services } = useSupabase();
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState('All');
 
@@ -534,7 +522,7 @@ const Projects = () => {
 };
 
 const Services = ({ onServiceClick }: { onServiceClick: (service: string) => void }) => {
-  const { services } = useFirebase();
+  const { services } = useSupabase();
 
   return (
     <section id="services" className="py-24">
@@ -575,7 +563,7 @@ const Services = ({ onServiceClick }: { onServiceClick: (service: string) => voi
 };
 
 const Certificates = () => {
-  const { certificates: certs } = useFirebase();
+  const { certificates: certs } = useSupabase();
   const [showAll, setShowAll] = useState(false);
 
   const displayedCerts = certs.slice(0, 3);
@@ -730,7 +718,7 @@ const About = ({ settings }: { settings: Settings }) => {
 };
 
 const ContactModal = ({ service, onClose }: { service: string; onClose: () => void }) => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const [formData, setFormData] = useState({ 
     name: user?.displayName || '', 
     email: user?.email || '', 
@@ -754,12 +742,12 @@ const ContactModal = ({ service, onClose }: { service: string; onClose: () => vo
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // 1. Save to Firestore
-      await addDoc(collection(db, 'messages'), {
+      // 1. Save to Supabase
+      await supabase.from('messages').insert({
         ...formData,
         service,
         status: 'pending',
-        createdAt: serverTimestamp()
+        created_at: new Date().toISOString()
       });
 
       // 2. Send to Formspree for email notification (Optional)
@@ -875,7 +863,7 @@ const ContactModal = ({ service, onClose }: { service: string; onClose: () => vo
 
 const ChatBox = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const { chatMessages: messages } = useFirebase();
+  const { chatMessages: messages } = useSupabase();
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const [sessionId] = useState(() => {
@@ -903,11 +891,11 @@ const ChatBox = () => {
     setInput('');
 
     try {
-      await addDoc(collection(db, 'chat_messages'), {
+      await supabase.from('chat_messages').insert({
         session_id: sessionId,
         sender: 'User',
         text,
-        createdAt: serverTimestamp()
+        created_at: new Date().toISOString()
       });
     } catch (err) {
       console.error('Chat send error:', err);
@@ -984,10 +972,12 @@ const FileUpload = ({
 
     setIsUploading(true);
     try {
-      const storageRef = ref(storage, `uploads/${Date.now()}-${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      onUpload(url);
+      const path = `uploads/${Date.now()}-${file.name}`;
+      const { data, error } = await supabase.storage.from('uploads').upload(path, file);
+      if (error) throw error;
+      
+      const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(path);
+      onUpload(urlData.publicUrl);
     } catch (err) {
       console.error('Upload failed:', err);
     } finally {
@@ -1071,9 +1061,10 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
     services, 
     certificates, 
     messages, 
-    settings: firebaseSettings, 
-    chatMessages 
-  } = useFirebase();
+    settings, 
+    chatMessages,
+    refreshData 
+  } = useSupabase();
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [showForm, setShowForm] = useState(false);
@@ -1084,10 +1075,10 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
   const [localSettings, setLocalSettings] = useState<Settings | null>(null);
 
   useEffect(() => {
-    if (firebaseSettings) {
-      setLocalSettings(firebaseSettings);
+    if (settings) {
+      setLocalSettings(settings);
     }
-  }, [firebaseSettings]);
+  }, [settings]);
 
   const chatSessions = useMemo(() => {
     const sessions = new Map();
@@ -1124,11 +1115,11 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
     setChatInput('');
 
     try {
-      await addDoc(collection(db, 'chat_messages'), {
+      await supabase.from('chat_messages').insert({
         session_id: selectedSession,
         sender: 'Admin',
         text,
-        createdAt: serverTimestamp()
+        created_at: new Date().toISOString()
       });
     } catch (err) {
       console.error('Chat reply error:', err);
@@ -1138,8 +1129,9 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
   const handleDelete = async (type: string, id: string) => {
     if (!window.confirm(`Are you sure you want to delete this ${type.slice(0, -1)}?`)) return;
     try {
-      await deleteDoc(doc(db, type, id));
+      await supabase.from(type).delete().eq('id', id);
       showNotification(`${type.slice(0, -1)} deleted successfully!`);
+      await refreshData();
     } catch (err) {
       console.error('Delete failed:', err);
       showNotification('An error occurred while deleting', 'error');
@@ -1148,11 +1140,12 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
 
   const handleUpdateMessageStatus = async (id: string, status: string, contract_url?: string) => {
     try {
-      await updateDoc(doc(db, 'messages', id), {
+      await supabase.from('messages').update({
         status,
         ...(contract_url !== undefined && { contract_url })
-      });
+      }).eq('id', id);
       showNotification(`Inquiry marked as ${status}!`);
+      await refreshData();
     } catch (err) {
       console.error('Update failed:', err);
       showNotification('An error occurred while updating status', 'error');
@@ -1171,21 +1164,22 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
       const data = Object.fromEntries(formData.entries());
       
       if (activeTab === 'settings') {
-        await setDoc(doc(db, 'settings', 'global'), data);
+        await supabase.from('settings').upsert({ ...data, id: 'global' });
         showNotification('✅ Success! Your site content has been saved and updated.');
         return;
       }
 
       if (editingItem?.id) {
-        await updateDoc(doc(db, activeTab, editingItem.id), data);
+        await supabase.from(activeTab).update(data).eq('id', editingItem.id);
       } else {
-        await addDoc(collection(db, activeTab), {
+        await supabase.from(activeTab).insert({
           ...data,
-          createdAt: serverTimestamp()
+          created_at: new Date().toISOString()
         });
       }
 
       showNotification(`${activeTab.slice(0, -1)} saved successfully!`);
+      await refreshData();
       setShowForm(false);
       setEditingItem(null);
     } catch (err) {
@@ -1319,8 +1313,8 @@ const AdminDashboard = ({ user, onLogout }: { user: User; onLogout: () => void }
                           setLocalSettings(prev => prev ? {...prev, resume_url: ''} : null);
                           if (urlToDelete) {
                             try {
-                              const fileRef = ref(storage, urlToDelete);
-                              await deleteObject(fileRef);
+                              const path = urlToDelete.split('/').pop();
+                              await supabase.storage.from('uploads').remove([path]);
                             } catch (err) {
                               console.error('Delete failed:', err);
                             }
@@ -1623,7 +1617,7 @@ const Login = ({ onBack, onLoginSuccess }: { onBack: () => void; onLoginSuccess:
       return;
     }
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await supabase.auth.signInWithPassword({ email, password });
     } catch (err: any) {
       setError(err.message || 'Invalid credentials');
     }
@@ -1837,7 +1831,7 @@ const BackgroundEffects = () => {
 // --- Main App ---
 
 export default function App() {
-  const { user, settings } = useFirebase();
+  const { user, settings } = useSupabase();
   const [isLoading, setIsLoading] = useState(true);
   const [isDark, setIsDark] = useState(true);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -1863,7 +1857,7 @@ export default function App() {
   if (isLoading) return <LoadingScreen onComplete={() => setIsLoading(false)} />;
   if (!settings) return null;
 
-  if (isAdmin && showLogin) return <AdminDashboard user={(user as any) || { email: 'kaiDev' }} onLogout={() => { auth.signOut(); setIsCustomAdmin(false); setShowLogin(false); }} />;
+  if (isAdmin && showLogin) return <AdminDashboard user={(user as any) || { email: 'kaiDev' }} onLogout={() => { supabase.auth.signOut(); setIsCustomAdmin(false); setShowLogin(false); }} />;
 
   if (showLogin) return <Login onBack={() => setShowLogin(false)} onLoginSuccess={() => { setIsCustomAdmin(true); setShowLogin(true); }} />;
 
@@ -1935,7 +1929,7 @@ export default function App() {
                   <button 
                     onClick={async () => {
                       try {
-                        await signInWithGoogle();
+                        await supabase.auth.signInWithOAuth({ provider: 'google' });
                         setShowAuthPrompt(false);
                       } catch (err) {
                         console.error(err);
